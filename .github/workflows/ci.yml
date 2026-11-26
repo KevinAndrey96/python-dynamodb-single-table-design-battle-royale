@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Ruff and mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: "3.14"
+      - run: uv sync --locked
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run mypy
+
+  tests:
+    name: Tests on Python ${{ matrix.python-version }} (moto)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --locked
+      - name: Run the tests with a 100% coverage gate
+        run: uv run pytest --cov --cov-report=term-missing
+
+  integration:
+    name: Integration with DynamoDB Local
+    runs-on: ubuntu-latest
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:3.3.2
+        ports:
+          - 8000:8000
+    env:
+      DYNAMODB_ENDPOINT_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: "3.14"
+      - run: uv sync --locked
+      - name: Demo and concurrent joins against a real DynamoDB engine
+        run: uv run pytest -m integration -v
+
+  docker:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run the demo container against DynamoDB Local
+        shell: bash
+        run: |
+          docker compose up --build --abort-on-container-exit --exit-code-from app | tee output.txt
+          grep -q "la escritura condicional lo rechaza" output.txt
+          grep -q "sale del índice de partidas abiertas" output.txt
+      - if: always()
+        run: docker compose down -v
+
+  package:
+    name: Build the wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+      - run: uv build
+      - run: uvx twine check dist/*
