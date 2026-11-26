@@ -1,18 +1,13 @@
-# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
-
-# Cloud9 & IDEs
-.c9/
-.idea/
-.vscode/
-*.swp
-
-# Virtual environments
-venv/
-env/
-.env
-
-# OS
+.venv/
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+dist/
+build/
 .DS_Store
